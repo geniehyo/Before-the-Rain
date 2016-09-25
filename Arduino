@@ -1,0 +1,264 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <WiFi.h>
+
+// I2C LCD 기본 어드레스는 0x27
+LiquidCrystal_I2C lcd(0x27);
+
+char ssid[] = "박은인의 iPhone";     //  your network SSID (name)
+char pass[] = "eunin1213";  // your network password
+int status = WL_IDLE_STATUS;     // the Wifi radio's status
+
+const int modePin = 8;
+const int pirPin = 9;
+int BuzzerPin = 3;
+
+int pirState = LOW;
+int vall = 0;
+
+boolean lastButton = LOW;
+boolean currentButton = LOW;
+
+int lcdMode = 0;
+
+
+void setup() {
+
+	pinMode(pirPin, INPUT);    //inputPin을 입력모드로
+	pinMode(modePin, INPUT);
+	// put your setup code here, to run once:
+	Serial.begin(9600);
+	lcd = LiquidCrystal_I2C(GetAddress());
+
+
+	while (!Serial) {
+		; // wait for serial port to connect. Needed for native USB port only
+	}
+
+
+	// I2C LCD 모듈은 여러 종류인데 이 실험에서는 1을 사용
+	lcd.setBoardType(1);
+	lcd.begin(20, 4);  // 20 x 4
+					   // lcd.setBacklight(HIGH);
+	lcd.setCursor(2, 0);
+	lcd.print("Weather");
+
+	lcd.setCursor(0, 1);
+	lcd.print("W:");
+
+
+	// check for the presence of the shield:
+	if (WiFi.status() == WL_NO_SHIELD) {
+		Serial.println("WiFi shield not present");
+		// don't continue:
+		while (true);
+	}
+
+	String fv = WiFi.firmwareVersion();
+	if (fv != "1.1.0") {
+		Serial.println("Please upgrade the firmware");
+	}
+
+	// attempt to connect to Wifi network:
+	while (status != WL_CONNECTED) {
+		Serial.print("Attempting to connect to WPA SSID: ");
+		Serial.println(ssid);
+		// Connect to WPA/WPA2 network:
+		status = WiFi.begin(ssid, pass);
+
+		// wait 10 seconds for connection:
+		delay(10000);
+	}
+
+	// you're connected now, so print out the data:
+	Serial.print("You're connected to the network");
+	printCurrentNet();
+	printWifiData();
+
+
+}
+
+boolean debounce(boolean last)
+{
+	boolean current = digitalRead(modePin); //현재 버튼 상태를 확인
+	if (last != current) //이전 버튼 상태와 현재 버튼 상태가 다름
+	{
+		delay(5); //5ms 동안 기다림
+		current = digitalRead(modePin); //current에 현재 버튼 상태를 저장
+	}
+	return current; //current 변수값을 반환
+}
+
+void setMode(int mode)
+{
+	if (mode == 0)
+	{
+		lcd.setCursor(2, 0);
+		lcd.print("Weather");
+
+		lcd.setCursor(0, 1);
+		lcd.print("W:");
+	}
+	else if (mode == 1)
+	{
+		lcd.setCursor(2, 0);
+		lcd.print("DUST             ");
+
+	}
+}
+
+
+void loop() {
+	// put your main code here, to run repeatedly:
+
+	currentButton = debounce(lastButton);
+	if (lastButton == LOW && currentButton == HIGH)
+	{
+		lcdMode++;
+	}
+	lastButton = currentButton;
+
+	if (lcdMode == 2) lcdMode = 0;
+	setMode(lcdMode);
+
+	char c = Serial.read();
+
+	if (c == '5')
+	{
+		tone(BuzzerPin, 261);
+		delay(1000);
+		noTone(BuzzerPin);
+	}
+	else if (c == '1')
+	{
+		tone(BuzzerPin, 330);
+		delay(1000);
+		noTone(BuzzerPin);
+	}
+
+	//val = digitalRead(pirPin);   
+
+	/*
+	if (val == HIGH) {             //입력 값이 HIGH면
+	if (pirState == LOW) {
+	Serial.println("Hello! Looks good!");
+	lcd.backlight();
+	pirState = HIGH;  // 출력의 변화가 없으면, 시리얼 모니터에 Hello! Looks good! 이라는 문구가 켜짐을 유지합니다
+	}
+	} else {
+	if (pirState == HIGH) {              // 적외선을 띈 물체의 이동변화가 생기면 ,
+	Serial.println("Bye ! Have a good day~");
+	lcd.noBacklight();
+	pirState = LOW;      // 출력의 변화가 없으면, 시리얼 모니터에 Bye! Have a good day~ 라는 문구가 켜짐을 유지합니다
+	}
+	}
+	*/
+	setPir(vall);
+
+	//delay(10000);
+	//printCurrentNet();
+
+}
+
+
+void setPir(int val) {
+	val = digitalRead(pirPin);    // 입력값을 읽습니다
+
+	if (val == HIGH) {             //입력 값이 HIGH면
+		if (pirState == LOW) {
+			Serial.println("Hello! Looks good!");
+			lcd.backlight();
+			pirState = HIGH;  // 출력의 변화가 없으면, 시리얼 모니터에 Hello! Looks good! 이라는 문구가 켜짐을 유지합니다
+		}
+	}
+	else {
+		if (pirState == HIGH) {              // 적외선을 띈 물체의 이동변화가 생기면 ,
+			Serial.println("Bye ! Have a good day~");
+			lcd.noBacklight();
+			pirState = LOW;      // 출력의 변화가 없으면, 시리얼 모니터에 Bye! Have a good day~ 라는 문구가 켜짐을 유지합니다
+		}
+	}
+}
+
+
+
+
+
+// I2C address 찾기
+byte GetAddress()
+{
+	Wire.begin();
+	for (byte i = 1; i < 120; i++)
+	{
+		Wire.beginTransmission(i);
+		if (Wire.endTransmission() == 0)
+		{
+			Serial.print("Found address: ");
+			Serial.print(i, DEC);
+			Serial.print(" (0x");
+			Serial.print(i, HEX);
+			Serial.println(")");
+			return i;
+			delay(10);
+		}
+	}
+}
+
+void printWifiData() {
+	// print your WiFi shield's IP address:
+	IPAddress ip = WiFi.localIP();
+	Serial.print("IP Address: ");
+	Serial.println(ip);
+	Serial.println(ip);
+
+	// print your MAC address:
+	byte mac[6];
+	WiFi.macAddress(mac);
+	Serial.print("MAC address: ");
+	Serial.print(mac[5], HEX);
+	Serial.print(":");
+	Serial.print(mac[4], HEX);
+	Serial.print(":");
+	Serial.print(mac[3], HEX);
+	Serial.print(":");
+	Serial.print(mac[2], HEX);
+	Serial.print(":");
+	Serial.print(mac[1], HEX);
+	Serial.print(":");
+	Serial.println(mac[0], HEX);
+
+}
+
+void printCurrentNet() {
+	// print the SSID of the network you're attached to:
+	Serial.print("SSID: ");
+	Serial.println(WiFi.SSID());
+
+	// print the MAC address of the router you're attached to:
+	byte bssid[6];
+	WiFi.BSSID(bssid);
+	Serial.print("BSSID: ");
+	Serial.print(bssid[5], HEX);
+	Serial.print(":");
+	Serial.print(bssid[4], HEX);
+	Serial.print(":");
+	Serial.print(bssid[3], HEX);
+	Serial.print(":");
+	Serial.print(bssid[2], HEX);
+	Serial.print(":");
+	Serial.print(bssid[1], HEX);
+	Serial.print(":");
+	Serial.println(bssid[0], HEX);
+
+	// print the received signal strength:
+	long rssi = WiFi.RSSI();
+	Serial.print("signal strength (RSSI):");
+	Serial.println(rssi);
+
+	// print the encryption type:
+	byte encryption = WiFi.encryptionType();
+	Serial.print("Encryption Type:");
+	Serial.println(encryption, HEX);
+	Serial.println();
+}
